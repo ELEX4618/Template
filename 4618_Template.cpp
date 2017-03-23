@@ -1,6 +1,7 @@
 ////////////////////////////////////////////////////////////////
 // ELEX 4618 Template project for BCIT
 // Created Oct 5, 2016 by Craig Hennessey
+// Last updated March 23, 2017
 ////////////////////////////////////////////////////////////////
 #include "stdafx.h"
 
@@ -111,7 +112,7 @@ void do_video()
     
 int main(int argc, _TCHAR* argv[])
 {
-	test_com();
-	//do_image();
+	//test_com();
+	do_image();
 	//do_video ();
 }
