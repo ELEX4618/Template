@@ -7,9 +7,12 @@
 
 #include <string>
 #include <iostream>
+#include <thread>
 #include <time.h>
 
-#include "Serial.h"
+#include "Client.h"
+#include "Server.h"
+#include "Serial.h" // Must include Windows.h after Winsock2.h, so Serial must include after Client/Server
 
 // OpenCV Include
 #include "opencv.hpp"
@@ -110,9 +113,57 @@ void do_video()
   }      
 }		
     
+
+////////////////////////////////////////////////////////////////
+// Demo client server communication
+////////////////////////////////////////////////////////////////
+Server serv(4618);
+
+void serverfunc()
+{
+  serv.start();
+}
+
+void clientserver()
+{
+  std::string str;
+  cv::Mat im;
+
+  std::thread t(&serverfunc);
+  t.detach();
+
+  // Wait until server starts up (webcam is slow)
+  Sleep(2000);
+
+  // connect
+  Client client(4618, "127.0.0.1");
+
+  client.tx_str("cmd");
+  do
+  {
+    client.rx_str(str);
+    if (str.length() > 0)
+    {
+      std::cout << "\nClient Rx: " << str;
+    }
+  } while (str.length() == 0);
+
+  while (1)
+  {
+    client.tx_str("im");
+    Sleep(100);
+
+    if (client.rx_im(im) == TRUE)
+    {
+      cv::imshow("rx", im);
+      cv::waitKey(10);
+    }
+  }
+}
 int main(int argc, _TCHAR* argv[])
 {
 	//test_com();
-	do_image();
+	//do_image();
 	//do_video ();
+  clientserver();
 }
