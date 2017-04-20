@@ -8,7 +8,6 @@
 #include <string>
 #include <iostream>
 #include <thread>
-#include <time.h>
 
 #include "Client.h"
 #include "Server.h"
@@ -137,6 +136,10 @@ void clientserver()
 
   // connect
   Client client(4618, "127.0.0.1");
+  //Client client(4618, "192.168.1.3");
+
+  // Wait until server starts up (webcam is slow)
+  Sleep(500);
 
   client.tx_str("cmd");
   do
@@ -155,12 +158,16 @@ void clientserver()
 
     if (client.rx_im(im) == TRUE)
     {
-      cv::imshow("rx", im);
-      cv::waitKey(10);
+      if (im.empty() == false)
+      {
+        cv::imshow("rx", im);
+        cv::waitKey(10);
+      }
     }
   }
 }
-int main(int argc, _TCHAR* argv[])
+
+int main(int argc, char* argv[])
 {
 	//test_com();
 	//do_image();

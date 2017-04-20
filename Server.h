@@ -3,13 +3,6 @@
 ///////////////////////////////////////////////////////////////////
 #pragma once
 
-// OpenCV Include
-#include "opencv.hpp"
-
-#include "Winsock2.h"
-
-#define RECV_BUFF_SIZE 256
-
 class Server
 {
 private:
