@@ -48,7 +48,7 @@ Client::~Client()
 {
 	if (_socket != NULL) 
 	{
-		closesocket(_socket); // close
+		closesocket(_socket);
 	}
 
 	Sleep (50);
@@ -74,24 +74,54 @@ bool Client::rx_str (std::string &str)
   return false;
 }
 
+// Note probably would work just as well in blocking mode and no need for do/while loops (but then could not do auto-reconnect)
 bool Client::rx_im(cv::Mat &im)
 {
   int rxbytes;
   int imsize;
-  
-  // Should timeout if no data recieved
+  int64 start_time;
+  float elapsedtime;
+
+  // Get size of image in bytes
+  start_time = cv::getTickCount();
+  elapsedtime = 0;
   do
   {
     rxbytes = recv(_socket, (char *)&imsize, sizeof(imsize), 0);
+    elapsedtime = (float)(cv::getTickCount() - start_time) / (float)cv::getTickFrequency();
   } 
-  while (rxbytes < 0);
+  while (rxbytes < 0 && elapsedtime < 1.0); // Timeout after 1 second
   
-  // Should loop recv'ing data until imsize read (packets can be truncated) and timeout if not enough data recieved
-  rxbytes = recv(_socket, rxbuff, imsize, 0);
+  // If data received (not timeout)
   if (rxbytes > 0)
   {
-    im = imdecode(cv::Mat(rxbytes, 1, CV_8UC3, rxbuff), 1);
-    return true;
+    Sleep(200);
+
+    start_time = cv::getTickCount();
+    elapsedtime = 0;
+    rxbytes = -1;
+    int byte_offset = 0;
+
+    do
+    {
+      // Store incoming data into byte array
+      rxbytes = recv(_socket, &rxbuff[byte_offset], imsize, 0);
+
+      // If data recieved then offset for next potential read ** DID NOT TEXT LARGER IMAGES **
+      if (rxbytes > 0)
+      {
+        byte_offset = byte_offset + rxbytes;
+      }
+      elapsedtime = (float)(cv::getTickCount() - start_time) / (float)cv::getTickFrequency();
+    } 
+    while (rxbytes != imsize && elapsedtime < 999.0);  // Timeout after 1 second
+
+    // If all the bytes were recieved, decode JPEG data to image
+    if (rxbytes > 0 && rxbytes == imsize)
+    {
+      im = imdecode(cv::Mat(imsize, 1, CV_8UC3, rxbuff), 1);
+      return true;
+    }
   }
 
   return false;

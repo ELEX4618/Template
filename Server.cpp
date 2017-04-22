@@ -1,24 +1,23 @@
 ///////////////////////////////////////////////////////////////////
-// Prepared for BCIT ELEX4618 & ELEX4699, April 2017, by Craig Hennessey
+// Prepared for BCIT ELEX4618 April 2017, by Craig Hennessey
 ///////////////////////////////////////////////////////////////////
 #include "stdafx.h"
-
-#define WIN4618
-//#define PI4618
 
 #include <iostream>
 #include <string>
 
-#include "server.h"
+#define WIN4618
+//#define PI4618
 
 // OpenCV Include
 #ifdef WIN4618
 #include "opencv.hpp"
 #endif
-
 #ifdef PI4618
 #include <opencv2/opencv.hpp>
 #endif
+
+#include "server.h"
 
 #ifdef WIN4618
 #include "Winsock2.h"
@@ -44,21 +43,39 @@
 
 Server::Server(int port)
 {
+  // Default image is a small black 10x10 image
+  _im = cv::Mat::zeros(10, 10, CV_8UC3);
+
   _port = port;
 }
 
 Server::~Server()
 {
-  _exit = true;
+  stop();
+}
+
+void Server::set_image(cv::Mat &im)
+{
+  if (im.empty() == false)
+  {
+    _mutex.lock();
+    im.copyTo(_im);
+    _mutex.unlock();
+  }
+}
+
+void Server::stop()
+{
+  _exit = TRUE;
   cv::waitKey(150);
 }
 
 void Server::start()
 {
-  // VideoCapture here only for demo purposes
-  // Remove and replace with actual image to transmit (processsed by image proc system?) 
-  // Remember to protect images with mutex if multi-threaded
-  cv::VideoCapture vid(0);
+  int ret;
+  int64 wait_time = 0;
+  struct sockaddr_in server_addr, client_addr;
+
   cv::Mat frame;
 
   // Image compression parameters
@@ -67,8 +84,7 @@ void Server::start()
   compression_params.push_back(cv::IMWRITE_JPEG_QUALITY);
   compression_params.push_back(30); // 1 to 100 (100 = highest quality/largest image)
 
-  int ret;
-  struct sockaddr_in server_addr, client_addr;
+  _exit = false;
 
 #ifdef WIN4618
   WSADATA wsdat;
@@ -83,10 +99,10 @@ void Server::start()
   unsigned int addressSize = sizeof(server_addr);
 #endif
 
-
   char buff[BUFFER + 1]; // +1 for null
   u_long polling = 1;
 
+  // Winsock specific init
 #ifdef WIN4618
   if (WSAStartup(0x0101, &wsdat))
   {
@@ -95,6 +111,7 @@ void Server::start()
   }
 #endif
 
+  // Create TCP socket
   serversock = socket(AF_INET, SOCK_STREAM, 0);
   if (serversock == SOCKET_ERROR)
   {
@@ -104,6 +121,7 @@ void Server::start()
     return;
   }
 
+  // Set functions as non-blocking 
 #ifdef WIN4618
   if (ioctlsocket(serversock, FIONBIO, &polling) == SOCKET_ERROR)
   {
@@ -117,10 +135,12 @@ void Server::start()
   ioctl(serversock, FIONBIO, &opt);
 #endif
 
+  // Listen on specified port from any address
   server_addr.sin_family = AF_INET;
   server_addr.sin_port = htons(_port);
   server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
+  // Bind socket
   if (bind(serversock, (sockaddr *)&server_addr, sizeof(server_addr)) == SOCKET_ERROR)
   {
 #ifdef WIN4618
@@ -133,19 +153,26 @@ void Server::start()
     return;
   }
 
+  // Listen for client to connect, buffer up to 5 subsequent connection requests
   listen(serversock, BACKLOG);
 
-
+  std::cout << "\nWaiting for client";
   while (_exit == false)
   {
-    std::cout << "\nWaiting for client....";
+    if ((float)(cv::getTickCount() - wait_time) / (float)cv::getTickFrequency() > 0.25)
+    {
+      std::cout << ".";
+      wait_time = cv::getTickCount();
+    }
 
+    // Connection made to client socket
     clientsock = accept(serversock, (struct sockaddr *) &client_addr, &addressSize);
 
     if (clientsock != INVALID_SOCKET)
     {
       do
       {
+        // Check for any incoming data
         ret = recv(clientsock, buff, BUFFER, 0);
 
         // If socket was shut down orderly (client disconnected)
@@ -163,16 +190,12 @@ void Server::start()
         else if (ret == SOCKET_ERROR)
         {
 #ifdef PI4618
-          //unsigned int len = sizeof(errno);
-          //getsockopt(clientsock, SOL_SOCKET, SO_ERROR, &errno, &len);
-
           if (errno == EWOULDBLOCK)
           {
             // no data to recieve, go check again
           }
           else
           {
-            std::cout << "\nSO_ERROR";
             close(clientsock);
             clientsock = INVALID_SOCKET;
           }
@@ -197,9 +220,9 @@ void Server::start()
             // Add NULL terminator to string
             buff[ret] = 0;
 
-            // Processing incoming data
+            // Processing incoming data string
             std::string str = buff;
-            std::cout << "\nServer RX: " << str;
+            //std::cout << "\nServer RX: " << str;
 
             // The client sent "cmd" as a message
             if (str == "cmd")
@@ -213,12 +236,17 @@ void Server::start()
             {
               int send_returnval;
 
-              vid >> frame;
+              _mutex.lock();
+              _im.copyTo(frame);
+              _mutex.unlock();
+
               image_buffer.clear();
-
-              // Compress image to reduce size
-              cv::imencode("image.jpg", frame, image_buffer, compression_params);
-
+              if (frame.empty() == false)
+              {
+                // Compress image to reduce size
+                cv::imencode("image.jpg", frame, image_buffer, compression_params);
+              }
+              
               // First send image size as int
               int size = image_buffer.size();
               std::cout << "\nServer image size: " << size;
@@ -229,7 +257,8 @@ void Server::start()
             }
           }
         }
-      } while (clientsock != INVALID_SOCKET && _exit != true);
+      } 
+      while (clientsock != INVALID_SOCKET && _exit != true);
     }
   }
 

@@ -118,9 +118,29 @@ void do_video()
 ////////////////////////////////////////////////////////////////
 Server serv(4618);
 
+// Start TCP server
 void serverfunc()
 {
   serv.start();
+}
+
+// Send image to TCP server
+void serverimagefunc()
+{
+  cv::VideoCapture vid;
+
+  vid.open(0);
+
+  if (vid.isOpened() == TRUE)
+  {
+    do
+    {
+      cv::Mat frame;
+      vid >> frame;
+      serv.set_image(frame);
+    }
+    while (cv::waitKey(10) != ' ');
+  }
 }
 
 void clientserver()
@@ -128,15 +148,20 @@ void clientserver()
   std::string str;
   cv::Mat im;
 
-  std::thread t(&serverfunc);
-  t.detach();
+  // Start server
+  std::thread t1(&serverfunc);
+  t1.detach();
+
+  // Start image send to server
+  std::thread t2(&serverimagefunc);
+  t2.detach();
 
   // Wait until server starts up (webcam is slow)
   Sleep(2000);
 
   // connect
   Client client(4618, "127.0.0.1");
-  //Client client(4618, "192.168.1.3");
+  //Client client(4618, "192.168.1.80");
 
   // Wait until server starts up (webcam is slow)
   Sleep(500);
@@ -151,17 +176,19 @@ void clientserver()
     }
   } while (str.length() == 0);
 
+  int count = 0;
   while (1)
   {
     client.tx_str("im");
-    Sleep(100);
 
     if (client.rx_im(im) == TRUE)
     {
       if (im.empty() == false)
       {
+        count++;
+        std::cout << "\nImage received: " << count;
         cv::imshow("rx", im);
-        cv::waitKey(10);
+        cv::waitKey(100);
       }
     }
   }
