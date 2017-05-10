@@ -116,12 +116,12 @@ void do_video()
 ////////////////////////////////////////////////////////////////
 // Demo client server communication
 ////////////////////////////////////////////////////////////////
-Server serv(4618);
+Server serv;
 
 // Start TCP server
 void serverfunc()
 {
-  serv.start();
+  serv.start(4618);
 }
 
 // Send image to TCP server
@@ -137,7 +137,7 @@ void serverimagefunc()
     {
       cv::Mat frame;
       vid >> frame;
-      serv.set_image(frame);
+      serv.set_txim(frame);
     }
     while (cv::waitKey(10) != ' ');
   }

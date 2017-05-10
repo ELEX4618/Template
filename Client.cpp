@@ -114,7 +114,7 @@ bool Client::rx_im(cv::Mat &im)
       }
       elapsedtime = (float)(cv::getTickCount() - start_time) / (float)cv::getTickFrequency();
     } 
-    while (rxbytes != imsize && elapsedtime < 999.0);  // Timeout after 1 second
+    while (rxbytes != imsize && elapsedtime < 1.0);  // Timeout after 1 second
 
     // If all the bytes were recieved, decode JPEG data to image
     if (rxbytes > 0 && rxbytes == imsize)
