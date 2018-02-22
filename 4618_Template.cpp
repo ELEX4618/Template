@@ -19,6 +19,16 @@
 // OpenCV Library
 #pragma comment(lib,".\\opencv\\lib\\opencv_world310d.lib")
 
+void process_msg()
+{
+  MSG msg;
+  while (::PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+  {
+    ::TranslateMessage(&msg);
+    ::DispatchMessage(&msg);
+  }
+}
+
 ////////////////////////////////////////////////////////////////
 // Serial Communication
 ////////////////////////////////////////////////////////////////
@@ -26,10 +36,10 @@ void test_com()
 {
   // Comport class
   Serial com;
-  com.open("COM51");
+  com.open("COM89");
 
   // TX and RX strings
-  std::string tx_str = "G 1 1\n";
+  std::string tx_str = "G 1 15\n";
   std::string rx_str;
 
   // temporary storage
@@ -38,15 +48,16 @@ void test_com()
   {
     // Send TX string
 		com.write(tx_str.c_str(), tx_str.length());
-    Sleep(10); // not needed?
+    Sleep(10); // wait for ADC conversion, etc. May not be needed?
   
     rx_str = "";
     // start timeout count
-    float start_time = GetTickCount();
+    double start_time = cv::getTickCount();
 
     buff[0] = 0;
-		// If 1 byte was read then print to screen, timeout after 1 second
-    while (buff[0] != '\n' && GetTickCount() - start_time < 1000)
+		// Read 1 byte and if an End Of Line then exit loop
+    // Timeout after 1 second, if debugging step by step this will cause you to exit the loop
+    while (buff[0] != '\n' && (cv::getTickCount() - start_time) / cv::getTickFrequency() < 1.0)
     {
       if (com.read(buff, 1) > 0)
       {
@@ -55,7 +66,6 @@ void test_com()
     }
 
     printf ("\nRX: %s", rx_str.c_str());
-    cv::waitKey(1);
   } 
   while (1);
 }
@@ -196,8 +206,8 @@ void clientserver()
 
 int main(int argc, char* argv[])
 {
-	//test_com();
+	test_com();
 	//do_image();
 	//do_video ();
-  clientserver();
+  //clientserver();
 }
