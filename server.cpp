@@ -1,24 +1,9 @@
 ///////////////////////////////////////////////////////////////////
-// Prepared for BCIT ELEX4618 & ELEX4699, April 2017, by Craig Hennessey
+// Prepared for BCIT ELEX4618, May 2017, by Craig Hennessey
 ///////////////////////////////////////////////////////////////////
 #include "stdafx.h"
 
-#define WIN4618
-//#define PI4618
-
-#include <iostream>
-#include <string>
-
 #include "server.h"
-
-// OpenCV Include
-#ifdef WIN4618
-#include "opencv.hpp"
-#endif
-
-#ifdef PI4618
-#include <opencv2/opencv.hpp>
-#endif
 
 #ifdef WIN4618
 #include "Winsock2.h"
@@ -28,11 +13,13 @@
 #ifdef PI4618
 #define INVALID_SOCKET -1
 #define SOCKET_ERROR -1
+typedef int SOCKET;
 #include <sys/types.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #endif
@@ -42,9 +29,24 @@
 #define BACKLOG 5
 #define BUFFER 16000
 
-Server::Server(int port)
+bool setblocking(int fd, bool blocking)
 {
-  _port = port;
+   if (fd < 0) return false;
+
+#ifdef WIN4618
+   unsigned long mode = blocking ? 0 : 1;
+   return (ioctlsocket(fd, FIONBIO, &mode) == 0) ? true : false;
+#else
+   int flags = fcntl(fd, F_GETFL, 0);
+   if (flags < 0) return false;
+   flags = blocking ? (flags&~O_NONBLOCK) : (flags|O_NONBLOCK);
+   return (fcntl(fd, F_SETFL, flags) == 0) ? true : false;
+#endif
+}
+
+Server::Server()
+{
+  _txim = cv::Mat::zeros(10,10,CV_8UC3);
 }
 
 Server::~Server()
@@ -53,12 +55,18 @@ Server::~Server()
   cv::waitKey(150);
 }
 
-void Server::start()
+void Server::set_txim (cv::Mat &im)
 {
-  // VideoCapture here only for demo purposes
-  // Remove and replace with actual image to transmit (processsed by image proc system?) 
-  // Remember to protect images with mutex if multi-threaded
-  cv::VideoCapture vid(0);
+  if (im.empty() == false)
+  {
+    _immutex.lock();
+    im.copyTo(_txim);
+    _immutex.unlock();
+  }
+}
+
+void Server::start(int port)
+{
   cv::Mat frame;
 
   // Image compression parameters
@@ -69,23 +77,19 @@ void Server::start()
 
   int ret;
   struct sockaddr_in server_addr, client_addr;
-
+  SOCKET serversock = 0;
+  SOCKET clientsock = 0;
+ 
 #ifdef WIN4618
   WSADATA wsdat;
-  SOCKET serversock;
-  SOCKET clientsock = NULL;
-  int addressSize = sizeof(server_addr);
+ int addressSize = sizeof(server_addr);
 #endif
 
 #ifdef PI4618
-  int serversock;
-  int clientsock = 0;
   unsigned int addressSize = sizeof(server_addr);
 #endif
 
-
   char buff[BUFFER + 1]; // +1 for null
-  u_long polling = 1;
 
 #ifdef WIN4618
   if (WSAStartup(0x0101, &wsdat))
@@ -101,24 +105,22 @@ void Server::start()
 #ifdef WIN4618
     WSACleanup();
 #endif
+    std::cout << "Server Exit: socket error";
     return;
   }
 
-#ifdef WIN4618
-  if (ioctlsocket(serversock, FIONBIO, &polling) == SOCKET_ERROR)
+  if (setblocking(serversock, false) == SOCKET_ERROR)
   {
+    std::cout << "Server Exit: failed to set non-blocking";
+#ifdef WIN4618
     WSACleanup();
-    return;
-  }
 #endif
 
-#ifdef PI4618
-  int opt = 1;
-  ioctl(serversock, FIONBIO, &opt);
-#endif
+    return;
+  }
 
   server_addr.sin_family = AF_INET;
-  server_addr.sin_port = htons(_port);
+  server_addr.sin_port = htons(port);
   server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
   if (bind(serversock, (sockaddr *)&server_addr, sizeof(server_addr)) == SOCKET_ERROR)
@@ -130,20 +132,22 @@ void Server::start()
 #ifdef PI4618
     close(serversock);
 #endif  
+    std::cout << "Server Exit: bind error";
     return;
   }
 
   listen(serversock, BACKLOG);
 
-
   while (_exit == false)
   {
-    std::cout << "\nWaiting for client....";
-
+    cv::waitKey(100);
+    
     clientsock = accept(serversock, (struct sockaddr *) &client_addr, &addressSize);
 
     if (clientsock != INVALID_SOCKET)
     {
+      setblocking(clientsock, false);
+      
       do
       {
         ret = recv(clientsock, buff, BUFFER, 0);
@@ -199,37 +203,45 @@ void Server::start()
 
             // Processing incoming data
             std::string str = buff;
-            std::cout << "\nServer RX: " << str;
+            //std::cout << "\nServer RX: " << str;
 
-            // The client sent "cmd" as a message
-            if (str == "cmd")
-            {
-              int send_returnval;
-              std::string reply = "Hi there";
-              send_returnval = send(clientsock, reply.c_str(), reply.length(), 0);
-            }
             // The client sent "im" as a message
-            else if (str == "im")
+            if (str == "im")
             {
-              int send_returnval;
+              _immutex.lock();
+              _txim.copyTo(frame);
+              _immutex.unlock();
 
-              vid >> frame;
               image_buffer.clear();
-
-              // Compress image to reduce size
-              cv::imencode("image.jpg", frame, image_buffer, compression_params);
-
+              if (frame.empty() == false)
+              {
+                // Compress image to reduce size
+                cv::imencode("image.jpg", frame, image_buffer, compression_params);
+              }
+              
               // First send image size as int
               int size = image_buffer.size();
-              std::cout << "\nServer image size: " << size;
-              send_returnval = send(clientsock, (char *)&size, sizeof(size), 0);
+              //std::cout << "\nServer image size: " << size;
+              send(clientsock, (char *)&size, sizeof(size), 0);
 
               // Then send image
-              send_returnval = send(clientsock, reinterpret_cast<char*>(&image_buffer[0]), image_buffer.size(), 0);
+              send(clientsock, reinterpret_cast<char*>(&image_buffer[0]), image_buffer.size(), 0);
+            }
+            // The client sent a message, add to cmd list queue
+            else
+            {
+              _cmdmutex.lock();
+              _cmd_list.push_back(str);
+              _cmdmutex.unlock();
+
+              // Remove the following two lines in the final version
+              std::string reply = "Hi there";
+              send(clientsock, reply.c_str(), reply.length(), 0);
             }
           }
         }
-      } while (clientsock != INVALID_SOCKET && _exit != true);
+      } 
+      while (clientsock != INVALID_SOCKET && _exit != true);
     }
   }
 
@@ -242,3 +254,14 @@ void Server::start()
   close(serversock);
 #endif  
 }
+
+void Server::get_cmd (std::vector<std::string> &cmds)
+{
+  cmds.clear();
+  
+  // Copy command list into return list
+  _cmdmutex.lock();
+  _cmd_list.swap(cmds);
+  _cmdmutex.unlock();
+}
+

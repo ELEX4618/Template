@@ -19,6 +19,16 @@
 // OpenCV Library
 #pragma comment(lib,".\\opencv\\lib\\opencv_world310d.lib")
 
+void process_msg()
+{
+  MSG msg;
+  while (::PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+  {
+    ::TranslateMessage(&msg);
+    ::DispatchMessage(&msg);
+  }
+}
+
 ////////////////////////////////////////////////////////////////
 // Serial Communication
 ////////////////////////////////////////////////////////////////
@@ -26,10 +36,10 @@ void test_com()
 {
   // Comport class
   Serial com;
-  com.open("COM51");
+  com.open("COM89");
 
   // TX and RX strings
-  std::string tx_str = "G 1 1\n";
+  std::string tx_str = "G 1 15\n";
   std::string rx_str;
 
   // temporary storage
@@ -38,15 +48,16 @@ void test_com()
   {
     // Send TX string
 		com.write(tx_str.c_str(), tx_str.length());
-    Sleep(10); // not needed?
+    Sleep(10); // wait for ADC conversion, etc. May not be needed?
   
     rx_str = "";
     // start timeout count
-    float start_time = GetTickCount();
+    double start_time = cv::getTickCount();
 
     buff[0] = 0;
-		// If 1 byte was read then print to screen, timeout after 1 second
-    while (buff[0] != '\n' && GetTickCount() - start_time < 1000)
+		// Read 1 byte and if an End Of Line then exit loop
+    // Timeout after 1 second, if debugging step by step this will cause you to exit the loop
+    while (buff[0] != '\n' && (cv::getTickCount() - start_time) / cv::getTickFrequency() < 1.0)
     {
       if (com.read(buff, 1) > 0)
       {
@@ -116,11 +127,31 @@ void do_video()
 ////////////////////////////////////////////////////////////////
 // Demo client server communication
 ////////////////////////////////////////////////////////////////
-Server serv(4618);
+Server serv;
 
+// Start TCP server
 void serverfunc()
 {
-  serv.start();
+  serv.start(4618);
+}
+
+// Send image to TCP server
+void serverimagefunc()
+{
+  cv::VideoCapture vid;
+
+  vid.open(0);
+
+  if (vid.isOpened() == TRUE)
+  {
+    do
+    {
+      cv::Mat frame;
+      vid >> frame;
+      serv.set_txim(frame);
+    }
+    while (cv::waitKey(10) != ' ');
+  }
 }
 
 void clientserver()
@@ -128,15 +159,19 @@ void clientserver()
   std::string str;
   cv::Mat im;
 
-  std::thread t(&serverfunc);
-  t.detach();
+  // Start server
+  std::thread t1(&serverfunc);
+  t1.detach();
+
+  // Start image send to server
+  std::thread t2(&serverimagefunc);
+  t2.detach();
 
   // Wait until server starts up (webcam is slow)
   Sleep(2000);
 
   // connect
   Client client(4618, "127.0.0.1");
-  //Client client(4618, "192.168.1.3");
 
   // Wait until server starts up (webcam is slow)
   Sleep(500);
@@ -169,10 +204,32 @@ void clientserver()
   }
 }
 
+void print_menu()
+{
+	std::cout << "\n***********************************";
+	std::cout << "\n* ELEX4618 Template Project";
+	std::cout << "\n***********************************";
+	std::cout << "\n(1) Test serial COM communication";
+	std::cout << "\n(2) Show image manipulation";
+	std::cout << "\n(3) Show video manipulation";
+	std::cout << "\n(4) Test client/server communication";
+	std::cout << "\n(0) Exit";
+	std::cout << "\nCMD> ";
+}
+
 int main(int argc, char* argv[])
 {
-	//test_com();
-	do_image();
-	//do_video ();
-  //clientserver();
+	int cmd = -1;
+	do
+	{
+		print_menu();
+		std::cin >> cmd;
+		switch (cmd)
+		{
+		case 1: test_com(); break;
+		case 2: do_image(); break;
+		case 3: do_video(); break;
+		case 4: clientserver(); break;
+		}
+	} while (cmd != 0);
 }
