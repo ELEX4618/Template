@@ -78,20 +78,43 @@ bool Client::rx_im(cv::Mat &im)
 {
   int rxbytes;
   int imsize;
-  
+  int64 start_time;
+
   // Should timeout if no data recieved
+  start_time = cv::getTickCount();
+  float elapsedtime = 0;
   do
   {
     rxbytes = recv(_socket, (char *)&imsize, sizeof(imsize), 0);
+    elapsedtime = (float)(cv::getTickCount() - start_time) / (float)cv::getTickFrequency();
   } 
-  while (rxbytes < 0);
+  while (rxbytes < 0 && elapsedtime < 1.0);
   
-  // Should loop recv'ing data until imsize read (packets can be truncated) and timeout if not enough data recieved
-  rxbytes = recv(_socket, rxbuff, imsize, 0);
   if (rxbytes > 0)
   {
-    im = imdecode(cv::Mat(rxbytes, 1, CV_8UC3, rxbuff), 1);
-    return true;
+    Sleep(200);
+
+    // Should loop recv'ing data until imsize read (packets can be truncated) and timeout if not enough data recieved
+    start_time = cv::getTickCount();
+    float elapsedtime = 0;
+    rxbytes = -1;
+    int offset = 0;
+    do
+    {
+      rxbytes = recv(_socket, &rxbuff[offset], imsize, 0);
+      if (rxbytes > 0)
+      {
+        offset = offset + rxbytes;
+      }
+      elapsedtime = (float)(cv::getTickCount() - start_time) / (float)cv::getTickFrequency();
+    } 
+    while (rxbytes != imsize && elapsedtime < 1.0);
+
+    if (rxbytes > 0 && rxbytes == imsize)
+    {
+      im = imdecode(cv::Mat(imsize, 1, CV_8UC3, rxbuff), 1);
+      return true;
+    }
   }
 
   return false;

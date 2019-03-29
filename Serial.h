@@ -1,9 +1,16 @@
+#pragma once
+
+#include <string>
+#include <windows.h>
+
+typedef std::basic_string<TCHAR> tstring;
+
 /** Serial.h
  *
  * A very simple serial port control class that does NOT require MFC/AFX.
  *
  * License: This source code can be used and/or modified without restrictions.
- * It is provided as is and the author disclaims all warranties, expressed 
+ * It is provided as is and the author disclaims all warranties, expressed
  * or implied, including, without limitation, the warranties of
  * merchantability and of fitness for any purpose. The user must assume the
  * entire risk of using the Software.
@@ -12,15 +19,6 @@
  *
  * @version 0.1 -- 28 October 2008
  */
-
-#ifndef __SERIAL_H__
-#define __SERIAL_H__
-
-#include <string>
-#include <windows.h>
-
-typedef std::basic_string<TCHAR> tstring;
-
 class Serial
 {
 private:
@@ -32,6 +30,7 @@ public:
 	virtual ~Serial();
 
   bool open (std::string commPortName, int bitRate = 115200);
+	bool is_open();
 
   /** Writes a string of bytes to the serial port.
 	 *
@@ -54,5 +53,3 @@ public:
 	// Flushes everything from the serial port's read buffer
 	void flush();
 };
-
-#endif

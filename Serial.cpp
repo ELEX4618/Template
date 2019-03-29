@@ -14,6 +14,8 @@ using namespace std;
 
 #include "Serial.h"
 
+#define FLUSH_BUFFSIZE 10
+
 std::wstring s2ws(const std::string& s)
 {
  int len;
@@ -39,7 +41,7 @@ bool Serial::open(string commPortName, int bitRate)
 	if(commHandle == INVALID_HANDLE_VALUE) 
 	{
 		//throw("ERROR: Could not open com port");
-	  return FALSE;
+	  return false;
   }
 	else 
 	{
@@ -50,7 +52,7 @@ bool Serial::open(string commPortName, int bitRate)
 		{
 			Serial::~Serial();
 			//throw("ERROR: Could not set com port time-outs");
-      return FALSE;
+      return false;
 		}
 
 		// set DCB
@@ -69,16 +71,26 @@ bool Serial::open(string commPortName, int bitRate)
 		{
 			Serial::~Serial();
 			//throw("ERROR: Could not set com port parameters");
-      return FALSE;
+      return false;
 		}
 	}
 
-  return TRUE;
+  return true;
 }
 
 Serial::~Serial()
 {
 	CloseHandle(commHandle);
+}
+
+bool Serial::is_open()
+{
+	if (commHandle == NULL)
+	{
+		return false;
+	}
+
+	return true;
 }
 
 int Serial::write(const char *buffer, int buffLen)
@@ -102,8 +114,6 @@ int Serial::read(char *buffer, int buffLen)
 
 	return numRead;
 }
-
-#define FLUSH_BUFFSIZE 10
 
 void Serial::flush()
 {

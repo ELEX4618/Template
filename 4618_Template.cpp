@@ -151,17 +151,19 @@ void clientserver()
     }
   } while (str.length() == 0);
 
+  int count = 0;
   while (1)
   {
     client.tx_str("im");
-    Sleep(100);
 
     if (client.rx_im(im) == TRUE)
     {
       if (im.empty() == false)
       {
+        count++;
+        std::cout << "\nImage received: " << count;
         cv::imshow("rx", im);
-        cv::waitKey(10);
+        cv::waitKey(100);
       }
     }
   }
@@ -170,7 +172,7 @@ void clientserver()
 int main(int argc, char* argv[])
 {
 	//test_com();
-	//do_image();
+	do_image();
 	//do_video ();
-  clientserver();
+  //clientserver();
 }
